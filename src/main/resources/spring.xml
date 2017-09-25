@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:mvc="http://www.springframework.org/schema/mvc"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="
+       http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/context
+       http://www.springframework.org/schema/context/spring-context.xsd
+       http://www.springframework.org/schema/mvc
+       http://www.springframework.org/schema/mvc/spring-mvc.xsd
+        http://www.springframework.org/schema/tx
+       http://www.springframework.org/schema/tx/spring-tx.xsd
+        http://www.springframework.org/schema/aop
+       http://www.springframework.org/schema/aop/spring-aop.xsd
+">
+<!--告诉spring去此包下扫描东西, 扫描web相关的bean -->
+    <context:component-scan base-package="com.test"/>
+    <!-- 配置基于注解的声明式事务 -->
+    <tx:annotation-driven transaction-manager="ts"/>
+    <!--启动切面-->
+    <aop:config proxy-target-class="true"/>
+<!--启动mvc-->
+    <mvc:annotation-driven>
+        <mvc:message-converters>
+            <bean class="org.springframework.http.converter.StringHttpMessageConverter"/>
+            <bean class="com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter">
+                <property name="supportedMediaTypes">
+                    <list>
+                        <value>text/html;charset=utf-8</value>
+                        <value>application/json</value>
+                    </list>
+                </property>
+            </bean>
+        </mvc:message-converters>
+    </mvc:annotation-driven>
+    <!--配置切面-->
+    <bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor"/>
+    <!-- 配置jsp 显示ViewResolver -->
+    <bean class="org.springframework.web.servlet.view.InternalResourceViewResolver">
+        <property name="prefix" value="/"/>
+        <property name="suffix" value=".jsp"/>
+    </bean>
+
+   <!--pool-->
+    <bean id="ds" class="com.alibaba.druid.pool.DruidDataSource">
+        <property name="driverClassName" value="com.mysql.jdbc.Driver"/>
+        <property name="url" value="jdbc:mysql://localhost:3306/scott"/>
+        <property name="username" value="root"/>
+        <property name="password" value="root"/>
+    </bean>
+    <!-- 配置事务管理器 -->
+    <bean id="ts" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <!-- 注入数据库连接池 -->
+        <property name="dataSource" ref="ds"></property>
+    </bean>
+    <!--mybatis-->
+    <bean class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="ds"/>
+        <property name="configLocation" value="classpath:mybatis.xml"/>
+        <property name="mapperLocations">
+            <list>
+                <value>classpath:mapper/*.xml</value>
+            </list>
+        </property>
+    </bean>
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="com.test.dao"/>
+    </bean>
+
+    <!--上传文件-->
+    <bean class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+        <property name="defaultEncoding" value="utf-8" />
+        <property name="maxUploadSize" value="10485760"/>
+    </bean>
+    <!--shiro-->
+    <bean id="realm" class="org.apache.shiro.realm.jdbc.JdbcRealm">
+        <property name="dataSource" ref="ds"/>
+        <!--permissionsLookupEnabled默认false。False时不会使用permissionsQuery的SQL去查询权限资源。设置为true才会去执行-->
+        <property name="permissionsLookupEnabled" value="true"/>
+        <!--authenticationQuery登录认证用户的查询SQL，需要用登录用户名作为条件，查询密码字段。-->
+        <property name="authenticationQuery" value="select pwd from users where account=?"></property>
+        <!--userRolesQuery用户角色查询SQL，需要通过登录用户名去查询。查询角色字段-->
+        <property name="userRolesQuery" value="select role_name from user_role left join users u using(id) left join roles using(rid) where u.account=?"/>
+        <!--permissionsQuery用户的权限资源查询SQL，需要用单一角色查询角色下的权限资源，如果存在多个角色，则是遍历每个角色，分别查询出权限资源并添加到集合中-->
+        <property name="permissionsQuery" value="select perms from role_res left join roles r using(rid) left join res using(id) where r.role_name=?"/>
+    </bean>
+    <bean id="cacheManager" class="org.apache.shiro.cache.MemoryConstrainedCacheManager"></bean>
+    <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+        <property name="realm" ref="realm"/>
+        <property name="cacheManager" ref="cacheManager"/>
+    </bean>
+    <!-- 安全认证过滤器 -->
+    <bean id="shiro" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+        <property name="securityManager" ref="securityManager"/>
+        <property name="loginUrl" value="/toLogin.do"/> <!-- 没有登录的用户请求需要登录的页面时跳转的url -->
+        <property name="unauthorizedUrl" value="/toNoQX.do"/> <!-- 没有权限时跳转的url -->
+
+        <!-- 过虑器链定义，从上向下顺序执行，一般将/**放在最下边 -->
+        <property name="filterChainDefinitions">
+            <value>
+                /css/**=anon
+                /js/**=anon
+                /login.html=anon <!--对资源设置匿名访问-->
+                /login.do=anon
+                /**=authc   <!-- /**=authc 表示所有的url都必须认证通过才可以访问-->
+
+            </value>
+        </property>
+    </bean>
+    <!--生命周期bean-->
+    <bean class="org.apache.shiro.spring.LifecycleBeanPostProcessor"/>
+    <!-- 开启shiro注解的spring配置方式的beans。在lifecycleBeanPostProcessor之后运行 -->
+    <bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor"/>
+    <!-- &lt;!&ndash;如果爆发异常就跳转&ndash;&gt;-->
+    <bean class="org.springframework.web.servlet.handler.SimpleMappingExceptionResolver">
+        <property name="exceptionMappings">
+            <props>
+                <prop key="org.apache.shiro.authc.UnknownAccountException">
+                    redirect:/toLogin.do
+                </prop>
+                <prop key="org.apache.shiro.authz.AuthorizationException">
+                    redirect:/toNoQX.do
+                </prop>
+                <!--处理所有异常类型-->
+                <prop key="java.lang.Exception">
+                    redirect:/toLogin.do
+                </prop>
+            </props>
+        </property>
+    </bean>
+</beans>
