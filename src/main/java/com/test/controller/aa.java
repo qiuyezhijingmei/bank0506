@@ -5,6 +5,6 @@ package com.test.controller;
  */
 public class aa {
     public static void main(String[] args) {
-        System.out.println("as");
+        System.out.println("wwewe");
     }
 }
